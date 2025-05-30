@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Página de Pagamento</title>
+    <link rel="stylesheet" href="app.css">
+</head>
+
+<body>
+    <div id="conteudoInicial">
+        <h1>PAGAMENTO DIGITAL COMPANHIA MUNICIPAL</h1>
+        <p>VALOR DA PASSAGEM: R$5,00</p>
+        <button onclick="gerarQRCode()">GERAR QR CODE</button>
+        <button onclick="pagamentoCartao()">CARTÃO DE DÉBITO</button>
+    </div>
+    <div id="qrCode"></div>
+    <div id="mensagemResultado" style="margin-top: 20px; font-size: 18px; font-weight: bold;"></div>
+    <div id="mensagemPagamento" style="display: none; font-size: 18px; font-weight: bold; margin-top: 20px;"></div>
+    <div id="msgCamera" style="text-align:center; font-weight:bold; margin-top: 15px; color: #333; display: none;">
+    </div>
+
+    <div id="voltarQr" style="display: none; margin-top: 10px;">
+        <button onclick="voltarParaInicio()">VOLTAR</button>
+    </div>
+    <div id="voltarCartao" style="display: none; margin-top: 10px;">
+        <button onclick="voltarParaInicio()">VOLTAR</button>
+    </div>
+
+    <script>
+        let erroRegistrado = false; // Variável que controla se um erro foi registrado
+        let bloqueado = false; // Impede interações múltiplas enquanto bloqueado
+        let clickTimer = null; //controle de clique simples
+        let clickCount = 0;
+
+        // Função para realizar pagamento com QR Code
+        function gerarQRCode() {
+            //faz requisição HTTP tipo GET para gerar o QR Code.
+            fetch('/generate-qr')
+                .then(response => response.json())
+                .then(data => {
+                    const qrCodeContainer = document.getElementById('qrCode');
+                    const mensagemResultado = document.getElementById('mensagemResultado');
+                    const conteudoInicial = document.getElementById('conteudoInicial');
+                    const voltarQr = document.getElementById('voltarQr');
+                    const msgCamera = document.getElementById('msgCamera');
+
+
+                    mensagemResultado.textContent = '';
+                    conteudoInicial.style.display = 'none'; // esconde o conteúdo principal
+                    voltarQr.style.display = 'block'; // mostra botão voltar do QR
+
+                    if (data.qrCodeUrl) {
+                        //insere uma <img> com qrcode dentro da div
+                        qrCodeContainer.innerHTML = `<img id="qrImage" src="${data.qrCodeUrl}" alt="QR Code">`;
+                        const qrImage = document.getElementById('qrImage');
+                        msgCamera.textContent = 'APONTE A CÂMERA PARA O QR CODE';
+                        msgCamera.style.display = 'block';
+
+                        // define comportamento de clique simples
+                        qrImage.onclick = () => {
+                            //se ja houve erro ou estiver esperando alguma ação impede o clique
+                            if (bloqueado || erroRegistrado) return;
+                            clickCount++;
+                            //cancela temporizador anterior, se houver
+                            if (clickTimer) clearTimeout(clickTimer);
+                            //cria um novo temporizador de 500ms
+                            clickTimer = setTimeout(() => {
+                                if (clickCount === 1) {
+                                    bloqueado = true; // bloqueia qualquer nova interação
+                                    mensagemResultado.textContent = 'PAGAMENTO EFETUADO COM SUCESSO';
+                                    mensagemResultado.style.color = 'green';
+                                    voltarQr.style.display = 'none';
+                                    msgCamera.style.display = 'none';
+                                } else if (clickCount === 2) {
+                                    erroRegistrado = true;
+                                    bloqueado = true;
+                                    mensagemResultado.textContent = 'SALDO INSUFICIENTE';
+                                    mensagemResultado.style.color = 'red';
+                                    voltarQr.style.display = 'none';
+                                    msgCamera.style.display = 'none';
+                                } else if (clickCount >= 3) {
+                                    erroRegistrado = true;
+                                    bloqueado = true;
+                                    mensagemResultado.textContent = 'ERRO NA LEITURA DO QR CODE';
+                                    mensagemResultado.style.color = 'red';
+                                    voltarQr.style.display = 'none';
+                                    msgCamera.style.display = 'none';
+                                }
+                                resetarTudo();
+                                clickCount = 0;
+                            }, 500); //espera 300ms pra ver se vira duplo click
+                        };
+
+                    } else {
+                        //caso nao receba a URL do qrcode exibe um erro na tela
+                        console.log("Erro: URL do QR Code não recebida.");
+                    }
+                })
+                .catch(error => {
+                    //se a requisição falhar mostra um erro no console para facilitar o debug 
+                    console.error('Erro ao gerar QR Code:', error);
+                });
+        }
+
+        // Função para realizar pagamento com cartão 
+        function pagamentoCartao() {
+
+            const conteudo = document.getElementById('conteudoInicial'); // div com os botões e valor
+
+            const mensagemResultado = document.getElementById('mensagemResultado');
+            const msg = document.getElementById('mensagemPagamento'); // div que vai mostrar a mensagem de aproximação
+            const voltarCartao = document.getElementById('voltarCartao'); //div que vai mostrar o botao de voltar
+
+            // Esconde o conteúdo principal e o QR Code
+            conteudo.style.display = 'none';
+
+
+            // Mostra a mensagem inicial
+            msg.innerText = "APROXIME SEU CARTÃO";
+            msg.style.display = 'block';
+            document.getElementById('voltarCartao').style.display = 'block'; // mostra botão voltar do cartão
+
+            // Função de crique NA MENSAGEM
+            msg.onclick = () => {
+                //se já houve erro ou se está bloqueado esperando alguma ação impede o clique
+                if (bloqueado || erroRegistrado) return;
+                clickCount++;
+                //cancela temporizador anterior
+                if (clickTimer) clearTimeout(clickTimer);
+
+                clickTimer = setTimeout(() => {
+                    if (clickCount === 1) { //se for 1 clique
+                        bloqueado = true;
+                        mensagemResultado.textContent = 'PAGAMENTO COM CARTÃO EFETUADO COM SUCESSO';
+                        mensagemResultado.style.color = 'green';
+                        voltarCartao.style.display = 'none';
+                    } else if (clickCount === 2) { //se for dois cliques
+                        erroRegistrado = true;
+                        bloqueado = true;
+                        mensagemResultado.textContent = 'SALDO INSUFICIENTE';
+                        mensagemResultado.style.color = 'red';
+                        voltarCartao.style.display = 'none';
+                    } else if (clickCount >= 3) { //se for 3 ou mais cliques
+                        erroRegistrado = true;
+                        bloqueado = true;
+                        mensagemResultado.textContent = 'ERRO NA LEITURA DO CARTÃO';
+                        mensagemResultado.style.color = 'red';
+                        voltarCartao.style.display = 'none';
+                    }
+                    resetarTudo();
+                    clickCount = 0;
+                }, 500);
+            };
+        }
+
+        // Função para voltar ao conteúdo inicial (BOTÃO DE VOLTAR)
+        function voltarParaInicio() {
+            // Esconde tudo o que pode estar visível
+            document.getElementById('qrCode').innerHTML = '';
+            document.getElementById('mensagemResultado').textContent = '';
+            document.getElementById('mensagemPagamento').textContent = '';
+            document.getElementById('mensagemPagamento').style.display = 'none';
+            document.getElementById('voltarQr').style.display = 'none';
+            document.getElementById('voltarCartao').style.display = 'none';
+            document.getElementById('conteudoInicial').style.display = 'block';
+            document.getElementById('msgCamera').style.display = 'none';
+            //reseta as variaveis de estado
+            erroRegistrado = false;
+            bloqueado = false;
+            clickTimer = null;
+            clickCount = 0;
+            // Reinstala o evento de clique para o botão de "Gerar QR Code"
+            const btnGerarQRCode = document.querySelector('button[onclick="gerarQRCode()"]');
+            if (btnGerarQRCode) {
+                btnGerarQRCode.onclick = gerarQRCode; // Reinstalando o evento para o botão
+            }
+        }
+
+        //função para resetar tudo e voltar ao inicio
+        function resetarTudo() {
+
+            setTimeout(() => {
+                document.getElementById('qrCode').innerHTML = '';
+                document.getElementById('mensagemResultado').textContent = ''; //limpa a mensagem de resultado
+                document.getElementById('mensagemPagamento').textContent = ''; //limpa a mensagem de pagamento
+                document.getElementById('mensagemPagamento').style.display = 'none'; //esconde a mensagem de pagamento
+                document.getElementById('msgCamera').style.display = 'none';
+                //reseta as variaveis de estado
+                erroRegistrado = false; //reseta a flag de erro
+                bloqueado = false; //libera o sistema para novos cliques
+                clickTimer = null; //reseta temporizador de cliques
+                clickCount = 0; //reseta o contador de cliques
+
+                const conteudoInicial = document.getElementById('conteudoInicial');
+                conteudoInicial.style.display = 'block'; //voltar ao display original
+
+                document.getElementById('voltarQr').style.display = 'none';
+                document.getElementById('voltarCartao').style.display = 'none';
+
+            }, 5000); //reseta apos 5s  
+        }
+
+    </script>
+</body>
+
+</html>
